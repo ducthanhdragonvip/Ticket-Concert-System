@@ -1,5 +1,6 @@
 from typing import TypeVar, Generic, Any
 from sqlalchemy.orm import Session
+from src.cache import cache_data
 ModelType = TypeVar("ModelType")
 CreateSchemaType = TypeVar("CreateSchemaType")
 UpdateSchemaType = TypeVar("UpdateSchemaType")
@@ -9,7 +10,9 @@ class BaseRepository(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         self.model = model
         self.id_field = id_field
 
-    def get(self, db: Session, id: Any) -> ModelType | None:
+
+    @cache_data(key_prefix="entity", expire_time=3600)
+    async def get(self, db: Session, id: Any) -> ModelType | None:
         return db.query(self.model).filter(getattr(self.model, self.id_field) == id).first()
 
     def create(self, db: Session, obj_in: CreateSchemaType) -> ModelType:

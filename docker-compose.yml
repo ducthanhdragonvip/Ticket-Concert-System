@@ -19,5 +19,32 @@ services:
     networks:
       - confluent
 
+  redis:
+    image: redis:7.0
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+    networks:
+      - confluent
+
+  redisinsight:
+    image: redis/redisinsight:2.70
+    container_name: redisinsight
+    ports:
+      - "5540:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - confluent
+
 networks:
   confluent:
