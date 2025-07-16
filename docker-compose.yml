@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: mysql
+      MYSQL_DATABASE: concert_db
+    volumes:
+      - ./mysql:/var/lib/mysql
+    ports:
+      - "3308:3306"
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 10s
+      retries: 5
+      timeout: 5s
+    networks:
+      - confluent
+
+networks:
+  confluent:
