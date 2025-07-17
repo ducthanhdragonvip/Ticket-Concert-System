@@ -8,21 +8,21 @@ UpdateSchemaType = TypeVar("UpdateSchemaType")
 class BaseRepository(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     def __init__(self, model: type[ModelType], id_field: str = "id"):
         self.model = model
-        self.id_field = id_field
+        self.id = id_field
 
 
-    @cache_data(key_prefix="entity", expire_time=3600)
+    @cache_data(expire_time=3600)
     async def get(self, db: Session, id: Any) -> ModelType | None:
-        return db.query(self.model).filter(getattr(self.model, self.id_field) == id).first()
+        return db.query(self.model).filter(getattr(self.model, self.id) == id).first()
 
-    def create(self, db: Session, obj_in: CreateSchemaType) -> ModelType:
+    async def create(self, db: Session, obj_in: CreateSchemaType) -> ModelType:
         db_obj = self.model(**obj_in.model_dump())
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
         return db_obj
 
-    def update(
+    async def update(
         self, db: Session, db_obj: ModelType, obj_in: UpdateSchemaType | dict[str, Any]
     ) -> ModelType:
         obj_data = obj_in if isinstance(obj_in, dict) else obj_in.model_dump(exclude_unset=True)
@@ -33,7 +33,7 @@ class BaseRepository(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db.refresh(db_obj)
         return db_obj
 
-    def delete(self, db: Session, id: Any) -> ModelType:
+    async def delete(self, db: Session, id: Any) -> ModelType:
         obj = db.query(self.model).get(id)
         db.delete(obj)
         db.commit()

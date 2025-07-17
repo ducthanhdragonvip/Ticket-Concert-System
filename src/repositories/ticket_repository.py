@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from src.entities.ticket import Ticket
 from src.dto.ticket import TicketCreate, TicketUpdate
 from src.repositories import BaseRepository
+from src.cache import cache_data, update_cache
 from datetime import datetime
 from uuid import uuid4
 from fastapi import HTTPException
@@ -9,12 +10,13 @@ from fastapi import HTTPException
 
 class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
     def __init__(self):
-        super().__init__(Ticket, id_field="ticket_id")
+        super().__init__(Ticket)
 
-    def create(self, db: Session, obj_in: TicketCreate) -> Ticket:
+    @cache_data(expire_time=3600, use_result_id=True)
+    async def create(self, db: Session, obj_in: TicketCreate) -> Ticket:
         # First check if zone exists and has available seats
         from src.repositories.zone_repository import zone_repository
-        zone = zone_repository.get(db, obj_in.zone_id)
+        zone = await zone_repository.get(db, obj_in.zone_id)
 
         if not zone:
             raise HTTPException(status_code=404, detail="Zone not found")
@@ -24,7 +26,7 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
 
         # Create the ticket
         db_obj = Ticket(
-            ticket_id=str(uuid4()),
+            id=str(uuid4()),
             concert_id=obj_in.concert_id,
             zone_id=obj_in.zone_id,
             created_at=datetime.now(),
@@ -33,12 +35,15 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
         db.add(db_obj)
 
         # Decrement available seats
+        zone = db.merge(zone)
         zone.available_seats -= 1
-        db.add(zone)
 
         try:
             db.commit()
             db.refresh(db_obj)
+            db.refresh(zone)
+
+            update_cache(obj_in.zone_id, zone)
             return db_obj
         except Exception as e:
             db.rollback()

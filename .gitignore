@@ -33,6 +33,7 @@ ENV/
 
 # Database files
 mysql/
+redis
 
 # Logs
 logs/

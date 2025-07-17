@@ -2,16 +2,18 @@ from sqlalchemy.orm import Session
 from src.entities.concert import Concert
 from src.dto.concert import ConcertCreate, ConcertUpdate
 from src.repositories import BaseRepository
+from src.cache import cache_data
 from uuid import uuid4
 
 class ConcertRepository(BaseRepository[Concert, ConcertCreate, ConcertUpdate]):
     def __init__(self):
-        super().__init__(Concert, id_field="concert_id")
+        super().__init__(Concert)
 
-    def create(self, db: Session, obj_in: ConcertCreate) -> Concert:
-        concert_id = getattr(obj_in, 'concert_id', f"con_{uuid4().hex[:8]}")
+    @cache_data(expire_time=3600, use_result_id=True)
+    async def create(self, db: Session, obj_in: ConcertCreate) -> Concert:
+        id = getattr(obj_in, 'id', f"con_{uuid4().hex[:8]}")
         db_obj = self.model(
-            concert_id=concert_id,
+            id=id,
             **obj_in.model_dump(exclude={'concert_id'})
         )
         db.add(db_obj)

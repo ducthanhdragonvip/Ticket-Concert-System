@@ -18,33 +18,65 @@ redis_client = redis.Redis(
 T = TypeVar('T')
 
 
-def cache_data(key_prefix: str, expire_time: int = 3600):
+def cache_data(expire_time: int = 3600, use_result_id: bool = False):
     """
     Decorator for caching function results in Redis
 
     Args:
-        key_prefix: Prefix for the cache key
         expire_time: Time in seconds before cache expires
+        use_result_id: If True, use the result's ID field for cache key (for create operations)
     """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
-            # Generate cache key - exclude database sessions and self
-            key_parts = []
+            # Get the model class from the repository instance
+            repo_instance = args[0] if args and hasattr(args[0], 'model') else None
+            # Execute function first if use_result_id is True
+            if use_result_id:
+                if inspect.iscoroutinefunction(func):
+                    result = await func(*args, **kwargs)
+                else:
+                    result = func(*args, **kwargs)
 
-            # Handle args - skip self and database sessions
+                # Generate cache key from result's ID
+                if result and hasattr(result, 'id'):
+                    cache_key = f"{result.id}"
+                else:
+                    return result
+
+                print(f"Cache key (from result): {cache_key}")
+
+                # Cache the result
+                try:
+                    if hasattr(result, '__dict__'):
+                        cache_data = {}
+                        for key, value in result.__dict__.items():
+                            if not key.startswith('_'):
+                                cache_data[key] = value
+                    else:
+                        cache_data = result
+
+                    serialized = json.dumps(cache_data, default=str)
+                    redis_client.setex(cache_key, expire_time, serialized)
+                    print(f"Cached data for key: {cache_key}")
+                except Exception as e:
+                    print(f"Failed to cache data: {e}")
+
+                return result
+
+            # Original caching logic for get operations
+            key_parts = []
             start_idx = 1 if args and hasattr(args[0], '__class__') else 0
             for arg in args[start_idx:]:
-                if not isinstance(arg, Session):  # Skip database sessions
+                if not isinstance(arg, Session):
                     key_parts.append(str(arg))
 
-            # Handle kwargs - exclude database sessions
             for k, v in sorted(kwargs.items()):
                 if not isinstance(v, Session):
                     key_parts.append(f"{k}={v}")
 
-            cache_key = f"{key_prefix}:{':'.join(key_parts)}"
+            cache_key = f"{''.join(key_parts)}"
             print(f"Cache key: {cache_key}")
 
             # Try to get from cache
@@ -52,8 +84,12 @@ def cache_data(key_prefix: str, expire_time: int = 3600):
             if cached_data:
                 print(f"Cache hit for key: {cache_key}")
                 try:
-                    return json.loads(cached_data)
-                except json.JSONDecodeError:
+                    data_dict = json.loads(cached_data)
+                    # Reconstruct the model object if we have a repository instance
+                    if repo_instance and hasattr(repo_instance, 'model'):
+                        return repo_instance.model(**data_dict)
+                    return data_dict
+                except (json.JSONDecodeError, TypeError):
                     print("Failed to decode cached data")
                     pass
 
@@ -68,7 +104,6 @@ def cache_data(key_prefix: str, expire_time: int = 3600):
             # Cache result
             if result:
                 try:
-                    # Convert SQLAlchemy model to dict
                     if hasattr(result, '__dict__'):
                         cache_data = {}
                         for key, value in result.__dict__.items():
@@ -92,6 +127,33 @@ def cache_data(key_prefix: str, expire_time: int = 3600):
 
 def invalidate_cache(key_pattern: str):
     """Clear cache entries matching the given pattern"""
-    keys = redis_client.keys(key_pattern)
-    if keys:
-        redis_client.delete(*keys)
+    # Use SCAN instead of KEYS for better performance
+    cursor = 0
+    keys_to_delete = []
+    while True:
+        cursor, keys = redis_client.scan(cursor, match=key_pattern, count=100)
+        keys_to_delete.extend(keys)
+        if cursor == 0:
+            break
+
+    if keys_to_delete:
+        redis_client.delete(*keys_to_delete)
+        print(f"Invalidated {len(keys_to_delete)} cache entries")
+
+
+def update_cache(key: str, data: Any, expire_time: int = 3600):
+    """Update cache with new data"""
+    try:
+        if hasattr(data, '__dict__'):
+            cache_data = {}
+            for k, v in data.__dict__.items():
+                if not k.startswith('_'):
+                    cache_data[k] = v
+        else:
+            cache_data = data
+
+        serialized = json.dumps(cache_data, default=str)
+        redis_client.setex(key, expire_time, serialized)
+        print(f"Updated cache for key: {key}")
+    except Exception as e:
+        print(f"Failed to update cache: {e}")

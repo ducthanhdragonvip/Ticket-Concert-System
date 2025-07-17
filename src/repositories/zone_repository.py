@@ -2,15 +2,17 @@ from sqlalchemy.orm import Session
 from src.entities.zone import Zone
 from src.dto.zone import ZoneCreate, ZoneUpdate
 from src.repositories import BaseRepository
+from src.cache import cache_data
 
 class ZoneRepository(BaseRepository[Zone, ZoneCreate, ZoneUpdate]):
     def __init__(self):
-        super().__init__(Zone, id_field="zone_id")
+        super().__init__(Zone)
 
-    def create(self, db: Session, obj_in: ZoneCreate) -> Zone:
-        zone_id = getattr(obj_in, 'zone_id', f"zon_{obj_in.concert_id}_{obj_in.name}")
+    @cache_data(expire_time=3600, use_result_id=True)
+    async def create(self, db: Session, obj_in: ZoneCreate) -> Zone:
+        id = getattr(obj_in, 'id', f"zon_{obj_in.concert_id}_{obj_in.name}")
         db_obj = self.model(
-            zone_id=zone_id,
+            id=id,
             **obj_in.model_dump(exclude={'zone_id'})
         )
         db.add(db_obj)
