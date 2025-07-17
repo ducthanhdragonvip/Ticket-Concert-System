@@ -6,8 +6,8 @@ from src.database import Base
 class Concert(Base):
     __tablename__ = "concerts"
 
-    concert_id = Column(String(50), primary_key=True)
-    venue_id = Column(String(50), ForeignKey("venues.venue_id"), nullable=False)
+    id = Column(String(50), primary_key=True)
+    venue_id = Column(String(50), ForeignKey("venues.id"), nullable=False)
     name = Column(String(255), nullable=False)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)

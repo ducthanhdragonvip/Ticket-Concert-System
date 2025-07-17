@@ -11,7 +11,7 @@ class VenueUpdate(BaseSchema):
     venues_capacity: int | None = None
 
 class Venue(BaseSchema):
-    venue_id: str
+    id: str
     venue_name: str
     location: str
     venues_capacity: int

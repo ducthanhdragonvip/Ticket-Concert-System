@@ -7,9 +7,9 @@ from datetime import datetime
 class Ticket(Base):
     __tablename__ = "tickets"
 
-    ticket_id = Column(String(50), primary_key=True)
-    concert_id = Column(String(50), ForeignKey("concerts.concert_id"), nullable=False)
-    zone_id = Column(String(50), ForeignKey("zones.zone_id"), nullable=False)
+    id = Column(String(50), primary_key=True)
+    concert_id = Column(String(50), ForeignKey("concerts.id"), nullable=False)
+    zone_id = Column(String(50), ForeignKey("zones.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String(20), nullable=False, default="active")
 

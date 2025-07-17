@@ -6,8 +6,8 @@ from src.database import Base
 class Zone(Base):
     __tablename__ = "zones"
 
-    zone_id = Column(String(50), primary_key=True)
-    concert_id = Column(String(50), ForeignKey("concerts.concert_id"), nullable=False)
+    id = Column(String(50), primary_key=True)
+    concert_id = Column(String(50), ForeignKey("concerts.id"), nullable=False)
     name = Column(String(255), nullable=False)
     price = Column(Float, nullable=False)
     zone_capacity = Column(Integer, nullable=False)

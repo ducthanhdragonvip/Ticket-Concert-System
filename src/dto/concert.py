@@ -20,7 +20,7 @@ class ConcertUpdate(BaseSchema):
     location: str | None = None
 
 class Concert(BaseSchema):
-    concert_id: str
+    id: str
     venue_id: str
     name: str
     start_time: datetime

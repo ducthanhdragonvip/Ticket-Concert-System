@@ -16,7 +16,7 @@ class ZoneUpdate(BaseSchema):
     description: str | None = None
 
 class Zone(BaseSchema):
-    zone_id: str
+    id: str
     concert_id: str
     name: str
     price: int

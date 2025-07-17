@@ -20,5 +20,5 @@ class TicketUpdate(TicketBase):
     status: str | None = None
 
 class Ticket(TicketBase):
-    ticket_id: str
+    id: str
     created_at: datetime
