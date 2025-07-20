@@ -1,8 +1,9 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from src.entities.concert import Concert
 from src.dto.concert import ConcertCreate, ConcertUpdate
 from src.repositories import BaseRepository
 from src.cache import cache_data
+from src.database import db_session_context
 from uuid import uuid4
 
 class ConcertRepository(BaseRepository[Concert, ConcertCreate, ConcertUpdate]):
@@ -10,16 +11,24 @@ class ConcertRepository(BaseRepository[Concert, ConcertCreate, ConcertUpdate]):
         super().__init__(Concert)
 
     @cache_data(expire_time=3600, use_result_id=True)
-    async def create(self, db: Session, obj_in: ConcertCreate) -> Concert:
+    def create(self, obj_in: ConcertCreate) -> Concert:
+        db = db_session_context.get()
         id = getattr(obj_in, 'id', f"con_{uuid4().hex[:8]}")
         db_obj = self.model(
             id=id,
-            **obj_in.model_dump(exclude={'concert_id'})
+            **obj_in.model_dump(exclude={'id'})
         )
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
         return db_obj
+
+    @cache_data(expire_time=3600)
+    def get(self, id: str) -> Concert | None:
+        db = db_session_context.get()
+        return db.query(self.model).options(joinedload(self.model.zones)).filter(
+            getattr(self.model, self.id) == id
+        ).first()
 
     def get_by_venue(self, db: Session, venue_id: str) -> list[Concert]:
         return db.query(self.model).filter(self.model.venue_id == venue_id).all()

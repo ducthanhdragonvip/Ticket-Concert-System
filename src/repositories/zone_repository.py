@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from src.database import db_session_context
 from src.entities.zone import Zone
 from src.dto.zone import ZoneCreate, ZoneUpdate
 from src.repositories import BaseRepository
@@ -9,11 +10,12 @@ class ZoneRepository(BaseRepository[Zone, ZoneCreate, ZoneUpdate]):
         super().__init__(Zone)
 
     @cache_data(expire_time=3600, use_result_id=True)
-    async def create(self, db: Session, obj_in: ZoneCreate) -> Zone:
+    async def create(self, obj_in: ZoneCreate) -> Zone:
+        db = db_session_context.get()
         id = getattr(obj_in, 'id', f"zon_{obj_in.concert_id}_{obj_in.name}")
         db_obj = self.model(
             id=id,
-            **obj_in.model_dump(exclude={'zone_id'})
+            **obj_in.model_dump(exclude={'id'})
         )
         db.add(db_obj)
         db.commit()

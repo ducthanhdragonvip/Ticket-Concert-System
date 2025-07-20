@@ -18,6 +18,70 @@ redis_client = redis.Redis(
 T = TypeVar('T')
 
 
+def serialize_model_with_relationships(obj):
+    """Serialize SQLAlchemy model with its relationships"""
+    if not hasattr(obj, '__dict__'):
+        return obj
+
+    result = {}
+    for key, value in obj.__dict__.items():
+        if key.startswith('_'):
+            continue
+        if hasattr(value, '__iter__') and not isinstance(value, (str, bytes)):
+            # Handle relationships (lists)
+            result[key] = [serialize_model_with_relationships(item) for item in value]
+        elif hasattr(value, '__dict__'):
+            # Handle single relationship
+            result[key] = serialize_model_with_relationships(value)
+        else:
+            result[key] = value
+    return result
+
+
+def reconstruct_model_with_relationships(model_class, data_dict):
+    """Reconstruct SQLAlchemy model with relationships from dict"""
+    # Import zone model to handle relationship reconstruction
+    from src.entities.zone import Zone
+
+    # Separate main model data from relationship data
+    main_data = {}
+    relationship_data = {}
+
+    # Get relationship names from the model
+    if hasattr(model_class, '__mapper__'):
+        relationship_names = [rel.key for rel in model_class.__mapper__.relationships]
+    else:
+        relationship_names = []
+
+    for key, value in data_dict.items():
+        if key in relationship_names:
+            relationship_data[key] = value
+        else:
+            main_data[key] = value
+
+    # Create main model instance
+    instance = model_class(**main_data)
+
+    # Set relationships - reconstruct as proper model instances
+    for rel_name, rel_data in relationship_data.items():
+        if isinstance(rel_data, list):
+            # Handle one-to-many relationships (like zones)
+            if rel_name == 'zones':
+                # Convert dict data back to Zone instances
+                zone_instances = []
+                for zone_dict in rel_data:
+                    zone_instance = Zone(**zone_dict)
+                    zone_instances.append(zone_instance)
+                setattr(instance, rel_name, zone_instances)
+            else:
+                setattr(instance, rel_name, rel_data)
+        else:
+            # Handle one-to-one relationships
+            setattr(instance, rel_name, rel_data)
+
+    return instance
+
+
 def cache_data(expire_time: int = 3600, use_result_id: bool = False):
     """
     Decorator for caching function results in Redis
@@ -32,6 +96,7 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
         async def async_wrapper(*args, **kwargs):
             # Get the model class from the repository instance
             repo_instance = args[0] if args and hasattr(args[0], 'model') else None
+
             # Execute function first if use_result_id is True
             if use_result_id:
                 if inspect.iscoroutinefunction(func):
@@ -47,16 +112,9 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
 
                 print(f"Cache key (from result): {cache_key}")
 
-                # Cache the result
+                # Cache the result with relationships
                 try:
-                    if hasattr(result, '__dict__'):
-                        cache_data = {}
-                        for key, value in result.__dict__.items():
-                            if not key.startswith('_'):
-                                cache_data[key] = value
-                    else:
-                        cache_data = result
-
+                    cache_data = serialize_model_with_relationships(result)
                     serialized = json.dumps(cache_data, default=str)
                     redis_client.setex(cache_key, expire_time, serialized)
                     print(f"Cached data for key: {cache_key}")
@@ -85,9 +143,9 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
                 print(f"Cache hit for key: {cache_key}")
                 try:
                     data_dict = json.loads(cached_data)
-                    # Reconstruct the model object if we have a repository instance
+                    # Reconstruct the model object with relationships
                     if repo_instance and hasattr(repo_instance, 'model'):
-                        return repo_instance.model(**data_dict)
+                        return reconstruct_model_with_relationships(repo_instance.model, data_dict)
                     return data_dict
                 except (json.JSONDecodeError, TypeError):
                     print("Failed to decode cached data")
@@ -101,17 +159,10 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
             else:
                 result = func(*args, **kwargs)
 
-            # Cache result
+            # Cache result with relationships
             if result:
                 try:
-                    if hasattr(result, '__dict__'):
-                        cache_data = {}
-                        for key, value in result.__dict__.items():
-                            if not key.startswith('_'):
-                                cache_data[key] = value
-                    else:
-                        cache_data = result
-
+                    cache_data = serialize_model_with_relationships(result)
                     serialized = json.dumps(cache_data, default=str)
                     redis_client.setex(cache_key, expire_time, serialized)
                     print(f"Cached data for key: {cache_key}")
@@ -123,7 +174,6 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
         return async_wrapper
 
     return decorator
-
 
 def invalidate_cache(key_pattern: str):
     """Clear cache entries matching the given pattern"""

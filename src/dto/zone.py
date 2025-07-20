@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from src.dto import BaseSchema
 
 class ZoneCreate(BaseSchema):
@@ -23,3 +25,5 @@ class Zone(BaseSchema):
     zone_capacity: int
     available_seats: int
     description: str
+    created_at: datetime
+    updated_at: datetime

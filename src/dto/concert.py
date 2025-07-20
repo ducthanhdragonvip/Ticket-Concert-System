@@ -1,6 +1,7 @@
 from datetime import datetime
 from src.dto import BaseSchema
 from src.dto.zone import Zone as ZoneSchema
+from src.dto.venue import Venue as VenueSchema
 
 
 class ConcertCreate(BaseSchema):
@@ -27,6 +28,8 @@ class Concert(BaseSchema):
     end_time: datetime
     description: str
     location: str
+    created_at: datetime
+    updated_at: datetime
 
 class ConcertDetail(Concert):
     zones: list[ZoneSchema] = []

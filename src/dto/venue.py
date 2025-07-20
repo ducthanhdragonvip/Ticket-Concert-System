@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from src.dto import BaseSchema
 
 class VenueCreate(BaseSchema):
@@ -15,3 +17,5 @@ class Venue(BaseSchema):
     venue_name: str
     location: str
     venues_capacity: int
+    created_at: datetime
+    updated_at: datetime

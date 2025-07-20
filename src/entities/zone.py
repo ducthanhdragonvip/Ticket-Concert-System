@@ -1,9 +1,9 @@
 from sqlalchemy import Column, String, Integer, ForeignKey, Text, Float
 from sqlalchemy.orm import relationship
 from src.database import Base
+from src.entities import TimestampMixin
 
-
-class Zone(Base):
+class Zone(Base, TimestampMixin):
     __tablename__ = "zones"
 
     id = Column(String(50), primary_key=True)

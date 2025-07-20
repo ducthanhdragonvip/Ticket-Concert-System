@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from src.database import db_session_context
 from src.entities.venue import Venue
 from src.dto.venue import VenueCreate, VenueUpdate
 from src.repositories import BaseRepository
@@ -15,7 +16,8 @@ class VenueRepository(BaseRepository[Venue, VenueCreate, VenueUpdate]):
     #     return db.query(self.model).filter(getattr(self.model, self.id) == id).first()
 
     @cache_data(expire_time=3600 , use_result_id=True)
-    async def create(self, db: Session, obj_in: VenueCreate) -> Venue:
+    async def create(self, obj_in: VenueCreate) -> Venue:
+        db = db_session_context.get()
         # Generate a unique ID if not provided
         id = getattr(obj_in, 'id', f"ven_{uuid4().hex[:8]}")
         db_obj = self.model(

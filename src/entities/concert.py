@@ -1,9 +1,10 @@
 from sqlalchemy import Column, String, DateTime, ForeignKey, Text
 from sqlalchemy.orm import relationship
 from src.database import Base
+from src.entities import TimestampMixin
 
 
-class Concert(Base):
+class Concert(Base,TimestampMixin):
     __tablename__ = "concerts"
 
     id = Column(String(50), primary_key=True)
@@ -17,7 +18,6 @@ class Concert(Base):
     # Relationships
     venue = relationship("Venue", back_populates="concerts")
     zones = relationship("Zone", back_populates="concert", cascade="all, delete-orphan")
-    tickets = relationship("Ticket", back_populates="concert", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Concert(concert_id='{self.concert_id}', name='{self.name}')>"
