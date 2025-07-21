@@ -9,7 +9,7 @@ class Ticket(Base,TimestampMixin):
 
     id = Column(String(50), primary_key=True)
     zone_id = Column(String(50), ForeignKey("zones.id"), nullable=False)
-    status = Column(String(20), nullable=False, default="active")
+    # status = Column(String(20), nullable=False, default="active")
 
     # Relationships
     zone = relationship("Zone", back_populates="tickets")

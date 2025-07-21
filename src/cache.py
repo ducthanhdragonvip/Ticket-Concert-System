@@ -94,17 +94,14 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
-            # Get the model class from the repository instance
             repo_instance = args[0] if args and hasattr(args[0], 'model') else None
 
-            # Execute function first if use_result_id is True
             if use_result_id:
                 if inspect.iscoroutinefunction(func):
                     result = await func(*args, **kwargs)
                 else:
                     result = func(*args, **kwargs)
 
-                # Generate cache key from result's ID
                 if result and hasattr(result, 'id'):
                     cache_key = f"{result.id}"
                 else:
@@ -112,9 +109,15 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
 
                 print(f"Cache key (from result): {cache_key}")
 
-                # Cache the result with relationships
                 try:
-                    cache_data = serialize_model_with_relationships(result)
+                    # Handle both Pydantic models and SQLAlchemy models
+                    if hasattr(result, 'dict'):  # Pydantic model
+                        cache_data = result.dict()
+                        cache_data['_cached_type'] = 'TicketDetail'
+                    else:  # SQLAlchemy model
+                        cache_data = serialize_model_with_relationships(result)
+                        cache_data['_cached_type'] = type(result).__name__
+
                     serialized = json.dumps(cache_data, default=str)
                     redis_client.setex(cache_key, expire_time, serialized)
                     print(f"Cached data for key: {cache_key}")
@@ -137,32 +140,40 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
             cache_key = f"{''.join(key_parts)}"
             print(f"Cache key: {cache_key}")
 
-            # Try to get from cache
             cached_data = redis_client.get(cache_key)
             if cached_data:
                 print(f"Cache hit for key: {cache_key}")
                 try:
                     data_dict = json.loads(cached_data)
-                    # Reconstruct the model object with relationships
-                    if repo_instance and hasattr(repo_instance, 'model'):
+                    cached_type = data_dict.pop('_cached_type', None)
+
+                    if cached_type == 'TicketDetail':
+                        from src.dto.ticket import TicketDetail
+                        return TicketDetail(**data_dict)
+                    elif repo_instance and hasattr(repo_instance, 'model'):
                         return reconstruct_model_with_relationships(repo_instance.model, data_dict)
                     return data_dict
-                except (json.JSONDecodeError, TypeError):
-                    print("Failed to decode cached data")
-                    pass
+                except (json.JSONDecodeError, TypeError) as e:
+                    print(f"Failed to decode cached data: {e}")
+                    redis_client.delete(cache_key)  # Clear corrupted cache
 
             print(f"Cache miss for key: {cache_key}")
 
-            # Execute function
             if inspect.iscoroutinefunction(func):
                 result = await func(*args, **kwargs)
             else:
                 result = func(*args, **kwargs)
 
-            # Cache result with relationships
             if result:
                 try:
-                    cache_data = serialize_model_with_relationships(result)
+                    # Handle both Pydantic models and SQLAlchemy models
+                    if hasattr(result, 'dict'):  # Pydantic model
+                        cache_data = result.dict()
+                        cache_data['_cached_type'] = 'TicketDetail'
+                    else:  # SQLAlchemy model
+                        cache_data = serialize_model_with_relationships(result)
+                        cache_data['_cached_type'] = type(result).__name__
+
                     serialized = json.dumps(cache_data, default=str)
                     redis_client.setex(cache_key, expire_time, serialized)
                     print(f"Cached data for key: {cache_key}")
@@ -172,7 +183,6 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
             return result
 
         return async_wrapper
-
     return decorator
 
 def invalidate_cache(key_pattern: str):

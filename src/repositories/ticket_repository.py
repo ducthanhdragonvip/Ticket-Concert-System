@@ -31,7 +31,7 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
         db_obj = Ticket(
             id=str(uuid4()),
             zone_id=obj_in.zone_id,
-            status=obj_in.status
+            # status=obj_in.status
         )
         db.add(db_obj)
 
@@ -48,7 +48,7 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
             return TicketDetail(
                 id=db_obj.id,
                 zone_id=db_obj.zone_id,
-                status=db_obj.status,
+                # status=db_obj.status,
                 created_at=db_obj.created_at,
                 updated_at=db_obj.updated_at,
                 concert_name=concert.name if concert else None,
@@ -80,7 +80,7 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
         return TicketDetail(
             id=ticket.id,
             zone_id=ticket.zone_id,
-            status=ticket.status,
+            # status=ticket.status,
             created_at=ticket.created_at,
             updated_at=ticket.updated_at,
             concert_name=concert.name if concert else None,
