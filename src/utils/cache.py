@@ -3,9 +3,9 @@ import json
 import redis
 from functools import wraps
 import inspect
-from typing import Any, Callable, Dict, Optional, TypeVar
+from typing import Any, Callable, TypeVar
 from sqlalchemy.orm import Session
-from src.config import settings
+from src.utils.config import settings
 
 # Create Redis connection
 redis_client = redis.Redis(

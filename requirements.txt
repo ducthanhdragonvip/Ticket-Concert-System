@@ -6,3 +6,4 @@ python-dotenv==1.1.1
 pymysql==1.1.1
 cryptography==45.0.5
 redis==6.2.0
+kafka-python==2.2.15

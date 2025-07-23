@@ -1,10 +1,10 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from src.database import db_session_context
+from src.utils.database import db_session_context
 from src.entities.zone import Zone
 from src.dto.zone import ZoneCreate, ZoneUpdate
 from src.repositories import BaseRepository
-from src.cache import cache_data
+from src.utils.cache import cache_data
 
 class ZoneRepository(BaseRepository[Zone, ZoneCreate, ZoneUpdate]):
     def __init__(self):

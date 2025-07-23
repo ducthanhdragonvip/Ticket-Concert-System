@@ -1,7 +1,6 @@
 from typing import TypeVar, Generic, Any
-from src.database import SessionLocal, db_session_context
-from sqlalchemy.orm import Session
-from src.cache import cache_data
+from src.utils.database import db_session_context
+from src.utils.cache import cache_data
 ModelType = TypeVar("ModelType")
 CreateSchemaType = TypeVar("CreateSchemaType")
 UpdateSchemaType = TypeVar("UpdateSchemaType")

@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
-from src.database import get_db, Base, engine, db_session_context
-from src import entities
+from src.utils.database import get_db, Base, engine, db_session_context
 from src.repositories.venue_repository import venue_repository
 from src.repositories.concert_repository import concert_repository
 from src.repositories.zone_repository import zone_repository
 from src.repositories.ticket_repository import ticket_repository
-from src.cache import invalidate_cache
+from src.utils.cache import invalidate_cache
+import logging
+
 
 from src.dto import (
     venue as venue_schemas,
@@ -16,6 +17,9 @@ from src.dto import (
 )
 
 Base.metadata.create_all(bind=engine)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 

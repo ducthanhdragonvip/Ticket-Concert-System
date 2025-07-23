@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
-from src.database import db_session_context
+from src.utils.database import db_session_context
 from src.entities.venue import Venue
 from src.dto.venue import VenueCreate, VenueUpdate
 from src.repositories import BaseRepository
-from src.cache import cache_data
+from src.utils.cache import cache_data
 from uuid import uuid4
 
 

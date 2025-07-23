@@ -2,8 +2,8 @@ from sqlalchemy.orm import Session, joinedload
 from src.entities.concert import Concert
 from src.dto.concert import ConcertCreate, ConcertUpdate
 from src.repositories import BaseRepository
-from src.cache import cache_data
-from src.database import db_session_context
+from src.utils.cache import cache_data
+from src.utils.database import db_session_context
 from uuid import uuid4
 
 class ConcertRepository(BaseRepository[Concert, ConcertCreate, ConcertUpdate]):
