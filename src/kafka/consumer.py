@@ -11,6 +11,7 @@ from src.utils.cache import redis_client
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -25,9 +26,15 @@ class TicketResultConsumer:
     def connect(self):
         """Initialize Kafka consumer for ticket results"""
         try:
+            ticket_events_topic = kafka_config.get_ticket_events_topic()
+
+            if not ticket_events_topic:
+                logger.warning("Ticket events topic not found")
+                return
+
             self.consumer = kafka_config.create_consumer(
                 group_id='ticket-result-consumer',
-                topics=[kafka_config.ticket_events_topic]
+                topics=ticket_events_topic
             )
             logger.info("Ticket result consumer connected")
         except Exception as e:
@@ -165,17 +172,3 @@ class TicketResultConsumer:
 
 # Global consumer instance
 ticket_result_consumer = TicketResultConsumer()
-
-
-# Auto-start the consumer when module is imported
-def initialize_consumer():
-    """Initialize consumer on module import"""
-    try:
-        ticket_result_consumer.start_consuming()
-        logger.info("Ticket result consumer initialized")
-    except Exception as e:
-        logger.error(f"Failed to initialize consumer: {e}")
-
-
-# Initialize on import
-initialize_consumer()

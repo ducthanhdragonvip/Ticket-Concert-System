@@ -9,6 +9,7 @@ class ConcertCreate(BaseSchema):
     name: str
     start_time: datetime
     end_time: datetime
+    num_zones: int
     description: str
     location: str
 
@@ -17,6 +18,7 @@ class ConcertUpdate(BaseSchema):
     name: str | None = None
     start_time: datetime | None = None
     end_time: datetime | None = None
+    num_zones: int | None = None
     description: str | None = None
     location: str | None = None
 
@@ -26,6 +28,7 @@ class Concert(BaseSchema):
     name: str
     start_time: datetime
     end_time: datetime
+    num_zones: int
     description: str
     location: str
     created_at: datetime

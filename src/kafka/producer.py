@@ -31,9 +31,11 @@ class TicketKafkaProducer:
                 return False
 
         try:
+            topic = kafka_config.get_concert_order_topic(ticket_order.concert_id)
+
             # Send the message
             future = self.producer.send(
-                kafka_config.ticket_orders_topic,
+                topic,
                 key=ticket_order.ticket_id,
                 value=ticket_order.to_dict()
             )
@@ -42,7 +44,8 @@ class TicketKafkaProducer:
             record_metadata = future.get(timeout=10)
             logger.info(f"Ticket order sent to topic {record_metadata.topic} "
                         f"partition {record_metadata.partition} "
-                        f"offset {record_metadata.offset}")
+                        f"offset {record_metadata.offset}"
+                        f"for concert {ticket_order.concert_id}")
             return True
 
         except KafkaError as e:
@@ -61,8 +64,10 @@ class TicketKafkaProducer:
                 return False
 
         try:
+            topic = kafka_config.get_concert_events_topic(ticket_result.concert_id)
+
             future = self.producer.send(
-                kafka_config.ticket_events_topic,
+                topic,
                 key=ticket_result.ticket_id,
                 value=ticket_result.to_dict()
             )

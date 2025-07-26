@@ -4,8 +4,6 @@ import time
 import json
 from typing import Dict, Any, List
 from datetime import datetime
-from kafka import KafkaConsumer
-from kafka.errors import KafkaError
 
 from src.repositories import zone_repository, concert_repository
 from src.utils.database import db_session_context ,get_db , SessionLocal, Base , engine
@@ -15,7 +13,6 @@ from src.dto.ticket import TicketDetail
 from src.entities.ticket import Ticket
 from src.entities.zone import Zone
 from src.entities.concert import Concert
-from src.utils.cache import update_cache, redis_client
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,9 +30,15 @@ class TicketProcessor:
     def connect(self):
         """Initialize Kafka consumer"""
         try:
+            ticket_orders_topic = kafka_config.get_ticket_orders_topic()
+            print(ticket_orders_topic)
+            if not ticket_orders_topic:
+                logger.warning("Concert order topic not found")
+                return
+
             self.consumer = kafka_config.create_consumer(
                 group_id='ticket-processor',
-                topics=[kafka_config.ticket_orders_topic]
+                topics=ticket_orders_topic
             )
             logger.info("Ticket processor consumer connected")
         except Exception as e:
@@ -46,6 +49,7 @@ class TicketProcessor:
         """Validate ticket order and check availability"""
         ticket_id = order_data.get('ticket_id')
         zone_id = order_data.get('zone_id')
+        concert_id = order_data.get('concert_id')
 
         try:
             # db_session_context.set(db)
@@ -76,6 +80,7 @@ class TicketProcessor:
             ticket_data = {
                 'id': ticket_id,
                 'zone_id': zone_id,
+                'concert_id': concert_id,
                 'created_at': datetime.now().isoformat(),
                 'updated_at': datetime.now().isoformat(),
                 'concert_name': concert.name if concert else None,
@@ -84,8 +89,6 @@ class TicketProcessor:
                 'zone_name': zone.name,
                 'zone_description': zone.description
             }
-
-
 
             # Add to pending batch for database persistence
             self.pending_tickets.append({
@@ -102,6 +105,7 @@ class TicketProcessor:
             logger.info(f"Ticket {ticket_id} validated successfully")
             return TicketResultEvent(
                 ticket_id=ticket_id,
+                concert_id=zone.concert_id,
                 status='success',
                 message='Ticket validated and reserved',
                 ticket_data=ticket_data
@@ -116,24 +120,6 @@ class TicketProcessor:
             )
         finally:
             db.close()
-
-    # async def update_ticket_cache(self, ticket_id: str, ticket_data: Dict[str, Any]):
-    #     """Update cache with ticket information"""
-    #     try:
-    #         # Store in Redis with expiration
-    #         cache_key = ticket_id
-    #         cache_data = {
-    #             **ticket_data,
-    #             '_cached_type': 'TicketDetail',
-    #             'cached_at': time.time()
-    #         }
-    #
-    #         serialized = json.dumps(cache_data, default=str)
-    #         redis_client.setex(cache_key, 7200, serialized)  # Cache for 2 hours
-    #         logger.info(f"Updated cache for ticket {ticket_id}")
-    #
-    #     except Exception as e:
-    #         logger.error(f"Failed to update cache for ticket {ticket_id}: {e}")
 
     async def batch_persist_tickets(self):
         logger.info(f"batch_persist_tickets called with {len(self.pending_tickets)} pending tickets")

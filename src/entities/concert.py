@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, String, DateTime, ForeignKey, Text, Integer
 from sqlalchemy.orm import relationship
 from src.utils.database import Base
 from src.entities import TimestampMixin
@@ -12,6 +12,7 @@ class Concert(Base,TimestampMixin):
     name = Column(String(255), nullable=False)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
+    num_zones = Column(Integer, nullable=False)
     description = Column(Text)
     location = Column(String(255))
 

@@ -4,7 +4,12 @@ from src.dto.concert import ConcertCreate, ConcertUpdate
 from src.repositories import BaseRepository
 from src.utils.cache import cache_data
 from src.utils.database import db_session_context
+from src.utils.kafka_config import kafka_config
 from uuid import uuid4
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class ConcertRepository(BaseRepository[Concert, ConcertCreate, ConcertUpdate]):
     def __init__(self):
@@ -21,6 +26,16 @@ class ConcertRepository(BaseRepository[Concert, ConcertCreate, ConcertUpdate]):
         db.add(db_obj)
         db.commit()
         db.refresh(db_obj)
+
+        try:
+            kafka_config.create_concert_topics(
+                concert_id=id,
+                num_partitions=obj_in.num_zones
+            )
+            logger.info(f"Created Kafka topics for concert {id} with {obj_in.num_zones} partitions")
+        except Exception as e:
+            logger.error(f"Failed to create Kafka topics for concert {id}: {e}")
+
         return db_obj
 
     @cache_data(expire_time=3600)

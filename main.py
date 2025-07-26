@@ -23,6 +23,13 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services on startup"""
+    from src.kafka.consumer import ticket_result_consumer
+    ticket_result_consumer.start_consuming()
+    logger.info("API consumer services initialized")
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Concert Ticketing API"}

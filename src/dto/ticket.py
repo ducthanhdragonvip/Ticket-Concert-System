@@ -4,6 +4,7 @@ from pydantic import BaseModel, validator
 
 class TicketBase(BaseSchema):
     zone_id: str
+    concert_id: str
     # status: str
     #
     # @validator('status')
@@ -25,6 +26,7 @@ class Ticket(TicketBase):
     updated_at: datetime
 
 class TicketDetail(Ticket):
+    concert_id : str | None = None
     concert_name: str | None = None
     concert_description: str | None = None
     price: float | None = None

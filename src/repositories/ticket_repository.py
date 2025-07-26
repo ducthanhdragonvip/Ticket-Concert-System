@@ -38,7 +38,8 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
         ticket_id = str(uuid4())
         ticket_order = TicketOrderEvent(
             ticket_id=ticket_id,
-            zone_id=obj_in.zone_id
+            zone_id=obj_in.zone_id,
+            concert_id=obj_in.concert_id
         )
 
         success = await ticket_producer.produce_ticket_order(ticket_order)
@@ -123,6 +124,7 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
         return TicketDetail(
             id=ticket.id,
             zone_id=ticket.zone_id,
+            concert_id=zone.concert_id,
             # status=ticket.status,
             created_at=ticket.created_at,
             updated_at=ticket.updated_at,
