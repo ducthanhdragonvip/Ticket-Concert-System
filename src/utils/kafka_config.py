@@ -185,10 +185,11 @@ class TicketOrderEvent:
 
 
 class TicketResultEvent:
-    def __init__(self, ticket_id: str, concert_id: str,status: str, message: str = None,
+    def __init__(self, ticket_id: str,zone_id: str ,concert_id: str,status: str, message: str = None,
                  ticket_data: Dict[str, Any] = None, error: str = None):
         import time
         self.ticket_id = ticket_id
+        self.zone_id = zone_id
         self.concert_id = concert_id
         self.status = status  # 'success', 'failed', 'invalid'
         self.message = message
@@ -199,6 +200,7 @@ class TicketResultEvent:
     def to_dict(self) -> Dict[str, Any]:
         return {
             'ticket_id': self.ticket_id,
+            'zone_id': self.zone_id,
             'concert_id': self.concert_id,
             'status': self.status,
             'message': self.message,

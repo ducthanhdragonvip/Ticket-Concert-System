@@ -6,6 +6,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 from src.repositories import zone_repository, concert_repository
+from src.utils.cache import update_cache
 from src.utils.database import db_session_context ,get_db , SessionLocal, Base , engine
 from src.utils.kafka_config import kafka_config, TicketResultEvent
 from src.kafka.producer import ticket_producer
@@ -61,14 +62,18 @@ class TicketProcessor:
             zone = await zone_repository.get(zone_id)
             if not zone:
                 return TicketResultEvent(
-                    # ticket_id=ticket_id,
+                    ticket_id=ticket_id,
+                    zone_id=zone_id,
+                    concert_id=concert_id,
                     status='failed',
                     error='Zone not found'
                 )
 
             if zone.available_seats <= 0:
                 return TicketResultEvent(
-                    # ticket_id=ticket_id,
+                    ticket_id=ticket_id,
+                    zone_id=zone_id,
+                    concert_id=concert_id,
                     status='failed',
                     error='No available seats in this zone'
                 )
@@ -99,12 +104,14 @@ class TicketProcessor:
                 'processed_at': time.time()
             })
 
-            # Update cache immediately with ticket info
-            # await self.update_ticket_cache(ticket_id, ticket_data)
+            zone.available_seats -= 1
+            update_cache(zone_id, zone)
+
 
             logger.info(f"Ticket {ticket_id} validated successfully")
             return TicketResultEvent(
                 ticket_id=ticket_id,
+                zone_id=zone_id,
                 concert_id=zone.concert_id,
                 status='success',
                 message='Ticket validated and reserved',

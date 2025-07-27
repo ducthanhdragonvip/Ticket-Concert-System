@@ -12,7 +12,7 @@ class Zone(Base, TimestampMixin):
     price = Column(Float, nullable=False)
     zone_capacity = Column(Integer, nullable=False)
     available_seats = Column(Integer, nullable=False)
-    zone_number = Column(Integer, nullable=False, unique=True)
+    zone_number = Column(Integer, nullable=False)
     description = Column(Text)
 
     # Relationships

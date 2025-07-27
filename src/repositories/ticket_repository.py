@@ -61,9 +61,10 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
 
         if result['status'] == 'failed':
             error_message = result.get('error', 'Unknown error occurred')
-            if 'available seats' in error_message:
+            print(result)
+            if 'available seats' in error_message.lower():
                 raise HTTPException(status_code=400, detail=error_message)
-            elif 'not found' in error_message:
+            elif 'not found' in error_message.lower():
                 raise HTTPException(status_code=404, detail=error_message)
             else:
                 raise HTTPException(status_code=500, detail=error_message)

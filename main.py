@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from src.utils.database import get_db, Base, engine, db_session_context
@@ -21,14 +22,17 @@ Base.metadata.create_all(bind=engine)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI()
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup"""
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     from src.kafka.consumer import ticket_result_consumer
     ticket_result_consumer.start_consuming()
     logger.info("API consumer services initialized")
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 def read_root():
@@ -87,9 +91,10 @@ async def create_ticket(ticket: ticket_schemas.TicketCreate, db: Session = Depen
     db_session_context.set(db)
     try:
         return await ticket_repository.create(ticket)
+    except HTTPException:
+        raise
     except Exception as e:
-        print(e)
-        # Log the error
+        logger.error(f"Unexpected error creating ticket: {e}")
         raise HTTPException(status_code=500, detail="Failed to create ticket")
 
 @app.get("/tickets/{ticket_id}", response_model=ticket_schemas.TicketDetail)

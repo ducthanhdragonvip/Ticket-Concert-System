@@ -104,9 +104,11 @@ class TicketResultConsumer:
                     ticket_data['id'] = ticket_data.pop('ticket_id')
 
                 ticket_data['_cached_type'] = 'TicketDetail'
-
-            serialized = json.dumps(ticket_data, default=str)
-            redis_client.setex(ticket_id, 3600, serialized)  # Cache for 1 hour
+                serialized = json.dumps(ticket_data, default=str)
+                redis_client.setex(ticket_id, 3600, serialized)
+            else:
+                logger.info(f"Skipping cache for failed ticket result: {ticket_id}")
+             # Cache for 1 hour
         except Exception as e:
             logger.error(f"Failed to cache result for ticket {ticket_id}: {e}")
 

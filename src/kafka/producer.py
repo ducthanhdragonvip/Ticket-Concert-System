@@ -36,8 +36,9 @@ class TicketKafkaProducer:
             # Send the message
             future = self.producer.send(
                 topic,
-                key=ticket_order.ticket_id,
-                value=ticket_order.to_dict()
+                key=ticket_order.zone_id,
+                value=ticket_order.to_dict(),
+                partition=int(ticket_order.zone_id[-1]) - 1
             )
 
             # Wait for the message to be sent
@@ -68,8 +69,9 @@ class TicketKafkaProducer:
 
             future = self.producer.send(
                 topic,
-                key=ticket_result.ticket_id,
-                value=ticket_result.to_dict()
+                key=ticket_result.zone_id,
+                value=ticket_result.to_dict(),
+                partition=int(ticket_result.zone_id[-1]) - 1
             )
 
             record_metadata = future.get(timeout=10)
