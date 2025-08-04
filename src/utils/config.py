@@ -8,6 +8,7 @@ class Settings():
     REDIS_HOST: str = os.getenv('REDIS_HOST')
     REDIS_PORT: int = int(os.getenv('REDIS_PORT'))
     KAFKA_BOOTSTRAP_SERVERS: str = os.getenv('KAFKA_BOOTSTRAP_SERVERS')
+    BATCH_TIMEOUT: int = int(os.getenv('BATCH_TIMEOUT'))
 
 settings = Settings()
 

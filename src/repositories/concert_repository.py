@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 from src.entities.concert import Concert
 from src.dto.concert import ConcertCreate, ConcertUpdate
-from src.repositories import BaseRepository
+from src.repositories.base import BaseRepository
 from src.utils.cache import cache_data
 from src.utils.database import db_session_context
 from src.utils.kafka_config import kafka_config

@@ -4,8 +4,10 @@ from src.kafka.consumer import ticket_result_consumer
 from src.utils.kafka_config import TicketOrderEvent
 from src.utils.database import db_session_context
 from src.entities.ticket import Ticket
+from src.entities.zone import Zone
 from src.dto.ticket import TicketCreate, TicketUpdate, TicketDetail
-from src.repositories import BaseRepository, concert_repository
+from src.repositories.base import BaseRepository
+from src.repositories.zone_repository import zone_repository
 from src.utils.cache import cache_data, update_cache
 from src.kafka.producer import ticket_producer
 from uuid import uuid4
@@ -22,15 +24,17 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
     # @cache_data(expire_time=3600, use_result_id=True)
     async def create(self,obj_in: TicketCreate) -> TicketDetail:
         # db = db_session_context.get()
-        # # First check if zone exists and has available seats
-        # from src.repositories.zone_repository import zone_repository
-        # zone = await zone_repository.get(obj_in.zone_id)
-        #
-        # if not zone:
-        #     raise HTTPException(status_code=404, detail="Zone not found")
-        #
-        # if zone.available_seats <= 0:
-        #     raise HTTPException(status_code=400, detail="No available seats in this zone")
+        # First check if zone exists and has available seats
+        zone = await zone_repository.get(obj_in.zone_id)
+
+        if not zone:
+            raise HTTPException(status_code=404, detail="Zone not found")
+
+        if str(obj_in.concert_id) not in str(obj_in.zone_id):
+            raise HTTPException(status_code=400, detail="Zone does not belong to the specified concert")
+
+        if zone.available_seats <= 0:
+            raise HTTPException(status_code=400, detail="No available seats in this zone")
         #
         # concert = await concert_repository.get(zone.concert_id)
 
@@ -136,13 +140,27 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
             zone_description=zone.description if zone else None
         )
 
-    def get_by_concert(self, db: Session, concert_id: str) -> list[Ticket]:
-        return db.query(self.model).filter(self.model.concert_id == concert_id).all()
+    async def get_by_concert(self,concert_id: str) -> list[Ticket]:
+        db = db_session_context.get()
+        tickets = db.query(self.model).join(Zone).filter(Zone.concert_id == concert_id).all()
+        result = []
+        for ticket in tickets:
+            ticket_detail = await self.get_with_details(ticket.id)
+            if ticket_detail:
+                result.append(ticket_detail)
 
-    def get_by_zone(self, db: Session, zone_id: str) -> list[Ticket]:
-        return db.query(self.model).filter(self.model.zone_id == zone_id).all()
+        return result
 
-    def get_by_status(self, db: Session, status: str) -> list[Ticket]:
-        return db.query(self.model).filter(self.model.status == status).all()
+    async def get_by_zone(self, zone_id: str) -> list[Ticket]:
+        db = db_session_context.get()
+        tickets = db.query(self.model).filter(self.model.zone_id == zone_id).all()
+
+        result = []
+        for ticket in tickets:
+            ticket_detail = await self.get_with_details(ticket.id)
+            if ticket_detail:
+                result.append(ticket_detail)
+
+        return result
 
 ticket_repository = TicketRepository()

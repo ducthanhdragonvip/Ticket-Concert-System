@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from src.utils.database import db_session_context
 from src.entities.zone import Zone
 from src.dto.zone import ZoneCreate, ZoneUpdate
-from src.repositories import BaseRepository
+from src.repositories.base import BaseRepository
 from src.repositories.concert_repository import concert_repository
 from src.utils.cache import cache_data
 

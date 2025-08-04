@@ -69,6 +69,17 @@ async def read_concert(concert_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Concert not found")
     return concert
 
+@app.put("/concerts/{concert_id}", response_model=concert_schemas.Concert)
+async def update_concert(concert_id: str, concert: concert_schemas.ConcertUpdate, db: Session = Depends(get_db)):
+    db_session_context.set(db)
+    existing_concert = await concert_repository.get(concert_id)
+    if not existing_concert:
+        raise HTTPException(status_code=404, detail="Concert not found")
+    updated_concert = await concert_repository.update(concert_id, concert)
+    if not updated_concert:
+        raise HTTPException(status_code=500, detail="Failed to update concert")
+    return updated_concert
+
 # Zone endpoints
 @app.post("/zones/", response_model=zone_schemas.Zone)
 async def create_zone(zone: zone_schemas.ZoneCreate, db: Session = Depends(get_db)):
@@ -104,6 +115,22 @@ async def read_ticket(ticket_id: str, db: Session = Depends(get_db)):
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
+
+@app.get("/tickets/concert/{concert_id}", response_model=list[ticket_schemas.Ticket])
+async def read_tickets_by_concert(concert_id: str, db: Session = Depends(get_db)):
+    db_session_context.set(db)
+    tickets = await ticket_repository.get_by_concert(concert_id=concert_id)
+    if not tickets:
+        raise HTTPException(status_code=404, detail="No tickets found for this concert")
+    return tickets
+
+@app.get("/tickets/zone/{zone_id}", response_model=list[ticket_schemas.Ticket])
+async def read_tickets_by_zone(zone_id: str, db: Session = Depends(get_db)):
+    db_session_context.set(db)
+    tickets = await ticket_repository.get_by_zone(zone_id=zone_id)
+    if not tickets:
+        raise HTTPException(status_code=404, detail="No tickets found for this zone")
+    return tickets
 
 if __name__ == "__main__":
     import uvicorn

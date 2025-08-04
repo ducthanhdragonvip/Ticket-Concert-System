@@ -14,6 +14,7 @@ from src.dto.ticket import TicketDetail
 from src.entities.ticket import Ticket
 from src.entities.zone import Zone
 from src.entities.concert import Concert
+from src.utils.config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ class TicketProcessor:
         self.consumer = None
         self.pending_tickets: List[Dict[str, Any]] = []
         self.batch_size = 10
-        self.batch_timeout = 15  # 2 minutes
+        self.batch_timeout = settings.BATCH_TIMEOUT
         self.last_batch_time = time.time()
         self.running = False
 
@@ -46,7 +47,7 @@ class TicketProcessor:
             logger.error(f"Failed to connect consumer: {e}")
             self.consumer = None
 
-    async def validate_ticket_order(self, order_data: Dict[str, Any]) -> TicketResultEvent:
+    async def validate_ticket_order(self, order_data: Dict[str, Any], offset: int) -> TicketResultEvent:
         """Validate ticket order and check availability"""
         ticket_id = order_data.get('ticket_id')
         zone_id = order_data.get('zone_id')
@@ -60,16 +61,11 @@ class TicketProcessor:
             db_session_context.set(db)
             # Check if zone exists and has available seats
             zone = await zone_repository.get(zone_id)
-            if not zone:
-                return TicketResultEvent(
-                    ticket_id=ticket_id,
-                    zone_id=zone_id,
-                    concert_id=concert_id,
-                    status='failed',
-                    error='Zone not found'
-                )
 
-            if zone.available_seats <= 0:
+            # Get concert details
+            concert = await concert_repository.get(zone.concert_id)
+
+            if offset > zone.zone_capacity:
                 return TicketResultEvent(
                     ticket_id=ticket_id,
                     zone_id=zone_id,
@@ -77,9 +73,6 @@ class TicketProcessor:
                     status='failed',
                     error='No available seats in this zone'
                 )
-
-            # Get concert details
-            concert = await concert_repository.get(zone.concert_id)
 
             # Create ticket data for validation
             ticket_data = {
@@ -185,7 +178,6 @@ class TicketProcessor:
             while self.running:
                 try:
                     # Poll for messages with timeout
-                    print(self.pending_tickets)
                     message_batch = self.consumer.poll(timeout_ms=1000)
 
                     # Process messages
@@ -193,10 +185,10 @@ class TicketProcessor:
                         for message in messages:
                             try:
                                 order_data = message.value
-                                logger.info(f"Processing ticket order: {order_data.get('ticket_id')}")
+                                logger.info(f"Processing ticket order: {order_data.get('ticket_id')} with offset {message.offset}")
 
                                 # Validate ticket order
-                                result = await self.validate_ticket_order(order_data)
+                                result = await self.validate_ticket_order(order_data, message.offset)
 
                                 # Produce result to ticket-events topic
                                 await ticket_producer.produce_ticket_result(result)
