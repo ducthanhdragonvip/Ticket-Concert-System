@@ -1,5 +1,6 @@
 import os
-from kafka import KafkaProducer, KafkaConsumer, KafkaAdminClient
+from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
+from kafka import KafkaAdminClient
 import json
 from typing import Dict, Any, List
 import logging
@@ -117,21 +118,20 @@ class KafkaConfig:
             logger.error(f"Error getting ticket events topic: {e}")
             return []
 
-    def create_producer(self) -> KafkaProducer:
-        return KafkaProducer(
+    def create_producer(self) -> AIOKafkaProducer:
+        return AIOKafkaProducer(
             bootstrap_servers=self.bootstrap_servers,
             value_serializer=lambda v: json.dumps(v).encode('utf-8'),
             key_serializer=lambda k: k.encode('utf-8') if k else None,
             acks='all',  # Wait for all replicas to acknowledge
-            retries=3,
             retry_backoff_ms=100,
             request_timeout_ms=30000,
-            batch_size=16384,
+            max_batch_size=16384,
             linger_ms=10
         )
 
-    def create_consumer(self, group_id: str, topics: list) -> KafkaConsumer:
-        return KafkaConsumer(
+    def create_consumer(self, group_id: str, topics: list) -> AIOKafkaConsumer:
+        return AIOKafkaConsumer(
             *topics,
             bootstrap_servers=self.bootstrap_servers,
             group_id=group_id,
@@ -146,7 +146,7 @@ class KafkaConfig:
             consumer_timeout_ms=1000
         )
 
-    def create_concert_consumer(self, concert_id: str, group_id: str = None) -> KafkaConsumer:
+    def create_concert_consumer(self, concert_id: str, group_id: str = None) -> AIOKafkaConsumer:
         """Create consumer for specific concert topics"""
         if not group_id:
             group_id = f'concert-{concert_id}-consumer'

@@ -24,16 +24,16 @@ class TicketProcessor:
     def __init__(self):
         self.consumer = None
         self.pending_tickets: List[Dict[str, Any]] = []
-        self.batch_size = 10
+        self.batch_size = 100
         self.batch_timeout = settings.BATCH_TIMEOUT
         self.last_batch_time = time.time()
         self.running = False
 
-    def connect(self):
+    async def connect(self):
         """Initialize Kafka consumer"""
         try:
             ticket_orders_topic = kafka_config.get_ticket_orders_topic()
-            print(ticket_orders_topic)
+            logger.info(ticket_orders_topic)
             if not ticket_orders_topic:
                 logger.warning("Concert order topic not found")
                 return
@@ -42,6 +42,7 @@ class TicketProcessor:
                 group_id='ticket-processor',
                 topics=ticket_orders_topic
             )
+            await self.consumer.start()
             logger.info("Ticket processor consumer connected")
         except Exception as e:
             logger.error(f"Failed to connect consumer: {e}")
@@ -166,7 +167,7 @@ class TicketProcessor:
     async def process_messages(self):
         """Process incoming ticket order messages"""
         if not self.consumer:
-            self.connect()
+            await self.connect()
             if not self.consumer:
                 logger.error("Consumer not available")
                 return
@@ -175,26 +176,16 @@ class TicketProcessor:
         self.running = True
 
         try:
-            while self.running:
+            async for message in self.consumer:
                 try:
-                    # Poll for messages with timeout
-                    message_batch = self.consumer.poll(timeout_ms=1000)
+                    order_data = message.value
+                    logger.info(f"Processing ticket order: {order_data.get('ticket_id')} with offset {message.offset}")
 
-                    # Process messages
-                    for topic_partition, messages in message_batch.items():
-                        for message in messages:
-                            try:
-                                order_data = message.value
-                                logger.info(f"Processing ticket order: {order_data.get('ticket_id')} with offset {message.offset}")
+                    # Validate ticket order
+                    result = await self.validate_ticket_order(order_data, message.offset)
 
-                                # Validate ticket order
-                                result = await self.validate_ticket_order(order_data, message.offset)
-
-                                # Produce result to ticket-events topic
-                                await ticket_producer.produce_ticket_result(result)
-
-                            except Exception as e:
-                                logger.error(f"Error processing message: {e}")
+                    # Produce result to ticket-events topic
+                    await ticket_producer.produce_ticket_result(result)
 
                     # Check if it's time to batch persist tickets
                     current_time = time.time()
@@ -203,27 +194,24 @@ class TicketProcessor:
                         await self.batch_persist_tickets()
                         self.last_batch_time = current_time
 
-                    await asyncio.sleep(0.1)  # Small delay to prevent busy waiting
-
                 except Exception as e:
-                    logger.error(f"Error in message processing loop: {e}")
-                    await asyncio.sleep(1)  # Wait before retrying
+                    logger.error(f"Error processing message: {e}")
 
-        except KeyboardInterrupt:
-            logger.info("Shutting down ticket processor...")
+        except Exception as e:
+            logger.error(f"Error in message processing: {e}")
         finally:
-            self.cleanup()
+            await self.cleanup()
 
-    def cleanup(self):
+    async def cleanup(self):
         """Clean up resources"""
         self.running = False
         if self.consumer:
-            self.consumer.close()
+            await self.consumer.stop()
             logger.info("Consumer closed")
 
         # Persist any remaining tickets
         if self.pending_tickets:
-            asyncio.run(self.batch_persist_tickets())
+            await self.batch_persist_tickets()
 
 # Global processor instance
 ticket_processor = TicketProcessor()

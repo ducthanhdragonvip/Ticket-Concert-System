@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -28,9 +29,18 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     from src.kafka.consumer import ticket_result_consumer
-    ticket_result_consumer.start_consuming()
+    consumer_task = asyncio.create_task(ticket_result_consumer.start_consuming())
     logger.info("API consumer services initialized")
     yield
+
+    ticket_result_consumer.running = False
+    consumer_task.cancel()
+    try:
+        await consumer_task
+    except asyncio.CancelledError:
+        pass
+    await ticket_result_consumer.cleanup()
+    logger.info("Consumer services shut down")
 
 app = FastAPI(lifespan=lifespan)
 

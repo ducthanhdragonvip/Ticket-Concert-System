@@ -4,12 +4,11 @@ import logging
 import time
 import json
 from typing import Dict, Any, Optional
-from kafka import KafkaConsumer
-from kafka.errors import KafkaError
+from aiokafka import AIOKafkaConsumer
+from aiokafka.errors import KafkaError
 from src.utils.kafka_config import kafka_config
 from src.utils.cache import redis_client
-from concurrent.futures import ThreadPoolExecutor
-import threading
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -19,11 +18,10 @@ class TicketResultConsumer:
     def __init__(self):
         self.consumer = None
         self.pending_results: Dict[str, Dict[str, Any]] = {}
-        self.result_locks: Dict[str, threading.Event] = {}
+        self.result_events: Dict[str, asyncio.Event] = {}
         self.running = False
-        self.executor = ThreadPoolExecutor(max_workers=5)
 
-    def connect(self):
+    async def connect(self):
         """Initialize Kafka consumer for ticket results"""
         try:
             ticket_events_topic = kafka_config.get_ticket_events_topic()
@@ -36,15 +34,16 @@ class TicketResultConsumer:
                 group_id='ticket-result-consumer',
                 topics=ticket_events_topic
             )
+            await self.consumer.start()
             logger.info("Ticket result consumer connected")
         except Exception as e:
             logger.error(f"Failed to connect result consumer: {e}")
             self.consumer = None
 
-    def start_consuming(self):
+    async def start_consuming(self):
         """Start consuming ticket results in background"""
         if not self.consumer:
-            self.connect()
+            await self.connect()
             if not self.consumer:
                 logger.error("Result consumer not available")
                 return
@@ -52,50 +51,38 @@ class TicketResultConsumer:
         logger.info("Starting ticket result consumer...")
         self.running = True
 
-        def consume_loop():
-            try:
-                while self.running:
-                    try:
-                        # Poll for messages
-                        message_batch = self.consumer.poll(timeout_ms=1000)
+        try:
+            async for message in self.consumer:
+                if not self.running:
+                    break
 
-                        for topic_partition, messages in message_batch.items():
-                            for message in messages:
-                                try:
-                                    result_data = message.value
-                                    ticket_id = result_data.get('ticket_id')
+                try:
+                    result_data = message.value
+                    ticket_id = result_data.get('ticket_id')
 
-                                    if ticket_id:
-                                        # Store the result
-                                        self.pending_results[ticket_id] = result_data
+                    if ticket_id:
+                        # Store the result
+                        self.pending_results[ticket_id] = result_data
 
-                                        # Notify waiting threads
-                                        if ticket_id in self.result_locks:
-                                            self.result_locks[ticket_id].set()
+                        # Notify waiting coroutines
+                        if ticket_id in self.result_events:
+                            self.result_events[ticket_id].set()
 
-                                        logger.info(
-                                            f"Received result for ticket {ticket_id}: {result_data.get('status')}")
+                        logger.info(
+                            f"Received result for ticket {ticket_id}: {result_data.get('status')}")
 
-                                        # Also cache the result for future retrieval
-                                        self.cache_ticket_result(ticket_id, result_data)
+                        # Also cache the result for future retrieval
+                        await self.cache_ticket_result(ticket_id, result_data)
 
-                                except Exception as e:
-                                    logger.error(f"Error processing result message: {e}")
+                except Exception as e:
+                    logger.error(f"Error processing result message: {e}")
 
-                    except Exception as e:
-                        logger.error(f"Error in result consumer loop: {e}")
-                        time.sleep(1)
+        except Exception as e:
+            logger.error(f"Error in result consumer loop: {e}")
+        finally:
+            await self.cleanup()
 
-            except KeyboardInterrupt:
-                logger.info("Result consumer shutting down...")
-            finally:
-                if self.consumer:
-                    self.consumer.close()
-
-        # Run consumer in executor to avoid blocking
-        self.executor.submit(consume_loop)
-
-    def cache_ticket_result(self, ticket_id: str, result_data: Dict[str, Any]):
+    async def cache_ticket_result(self, ticket_id: str, result_data: Dict[str, Any]):
         """Cache ticket result for future retrieval"""
         try:
             if result_data.get('status') == 'success' and 'ticket_data' in result_data:
@@ -120,40 +107,38 @@ class TicketResultConsumer:
             return result
 
         # Check cache first
-        cached_result = self.get_cached_result(ticket_id)
+        cached_result = await self.get_cached_result(ticket_id)
         if cached_result:
             return cached_result
 
         # Create event for this ticket
-        if ticket_id not in self.result_locks:
-            self.result_locks[ticket_id] = threading.Event()
+        if ticket_id not in self.result_events:
+            self.result_events[ticket_id] = asyncio.Event()
 
-        event = self.result_locks[ticket_id]
+        event = self.result_events[ticket_id]
 
         # Wait for result with timeout
-        def wait_for_result():
-            return event.wait(timeout)
+        try:
+            # Wait for result with timeout
+            await asyncio.wait_for(event.wait(), timeout=timeout)
 
-        # Run the wait in executor to avoid blocking
-        result_available = await asyncio.get_event_loop().run_in_executor(
-            self.executor, wait_for_result
-        )
+            if ticket_id in self.pending_results:
+                result = self.pending_results.pop(ticket_id)
+                # Clean up the event
+                if ticket_id in self.result_events:
+                    del self.result_events[ticket_id]
+                return result
 
-        if result_available and ticket_id in self.pending_results:
-            result = self.pending_results.pop(ticket_id)
-            # Clean up the event
-            if ticket_id in self.result_locks:
-                del self.result_locks[ticket_id]
-            return result
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout waiting for result of ticket {ticket_id}")
 
         # Clean up the event on timeout
-        if ticket_id in self.result_locks:
-            del self.result_locks[ticket_id]
+        if ticket_id in self.result_events:
+            del self.result_events[ticket_id]
 
-        logger.warning(f"Timeout waiting for result of ticket {ticket_id}")
         return None
 
-    def get_cached_result(self, ticket_id: str) -> Optional[Dict[str, Any]]:
+    async def get_cached_result(self, ticket_id: str) -> Optional[Dict[str, Any]]:
         """Get cached ticket result"""
         try:
             cached_data = redis_client.get(ticket_id)
@@ -163,12 +148,11 @@ class TicketResultConsumer:
             logger.error(f"Error getting cached result for ticket {ticket_id}: {e}")
         return None
 
-    def cleanup(self):
+    async def cleanup(self):
         """Clean up resources"""
         self.running = False
         if self.consumer:
-            self.consumer.close()
-        self.executor.shutdown(wait=True)
+            await self.consumer.stop()
         logger.info("Ticket result consumer cleaned up")
 
 
