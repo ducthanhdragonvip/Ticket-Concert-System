@@ -7,7 +7,7 @@ from datetime import datetime
 
 from src.repositories import zone_repository, concert_repository
 from src.utils.cache import update_cache
-from src.utils.database import db_session_context ,get_db , SessionLocal, Base , engine
+from src.utils.database import db_session_context, get_db, SessionLocal, Base, engine
 from src.utils.kafka_config import kafka_config, TicketResultEvent
 from src.kafka.producer import ticket_producer
 from src.dto.ticket import TicketDetail
@@ -23,11 +23,10 @@ logger = logging.getLogger(__name__)
 class TicketProcessor:
     def __init__(self):
         self.consumer = None
-        self.pending_tickets: List[Dict[str, Any]] = []
-        self.batch_size = 100
+        self.ticket_queue = asyncio.Queue()
         self.batch_timeout = settings.BATCH_TIMEOUT
-        self.last_batch_time = time.time()
         self.running = False
+        self.batch_task = None
 
     async def connect(self):
         """Initialize Kafka consumer"""
@@ -48,6 +47,47 @@ class TicketProcessor:
             logger.error(f"Failed to connect consumer: {e}")
             self.consumer = None
 
+    async def start_batch_processor(self):
+        """Background task to handle batch processing from queue"""
+        pending_tickets = []
+        last_batch_time = time.time()
+
+        while self.running:
+            try:
+                # Wait for items with timeout
+                ticket_info = await asyncio.wait_for(
+                    self.ticket_queue.get(),
+                    timeout=1.0
+                )
+                pending_tickets.append(ticket_info)
+                self.ticket_queue.task_done()
+
+                current_time = time.time()
+
+                # Process batch only if timeout reached AND we have tickets
+                # Remove the queue.empty() check to allow accumulation
+                if current_time - last_batch_time >= self.batch_timeout:
+                    if pending_tickets:
+                        await self.batch_persist_tickets(pending_tickets)
+                        pending_tickets.clear()
+                        last_batch_time = current_time
+
+            except asyncio.TimeoutError:
+                # Check if we should process pending tickets due to timeout
+                current_time = time.time()
+                if (pending_tickets and
+                        current_time - last_batch_time >= self.batch_timeout):
+                    await self.batch_persist_tickets(pending_tickets)
+                    pending_tickets.clear()
+                    last_batch_time = current_time
+            except Exception as e:
+                logger.error(f"Error in batch processor: {e}")
+
+        # Process any remaining tickets when shutting down
+        if pending_tickets:
+            await self.batch_persist_tickets(pending_tickets)
+
+
     async def validate_ticket_order(self, order_data: Dict[str, Any], offset: int) -> TicketResultEvent:
         """Validate ticket order and check availability"""
         ticket_id = order_data.get('ticket_id')
@@ -55,11 +95,9 @@ class TicketProcessor:
         concert_id = order_data.get('concert_id')
 
         try:
-            # db_session_context.set(db)
-            # db = db_session_context.get()
-
             db = SessionLocal()
             db_session_context.set(db)
+
             # Check if zone exists and has available seats
             zone = await zone_repository.get(zone_id)
 
@@ -89,18 +127,18 @@ class TicketProcessor:
                 'zone_description': zone.description
             }
 
-            # Add to pending batch for database persistence
-            self.pending_tickets.append({
+            # Add to queue for batch processing - thread-safe
+            ticket_info = {
                 'ticket_id': ticket_id,
                 'zone_id': zone_id,
                 'order_data': order_data,
                 'ticket_data': ticket_data,
                 'processed_at': time.time()
-            })
+            }
+            await self.ticket_queue.put(ticket_info)
 
             zone.available_seats -= 1
             update_cache(zone_id, zone)
-
 
             logger.info(f"Ticket {ticket_id} validated successfully")
             return TicketResultEvent(
@@ -122,22 +160,21 @@ class TicketProcessor:
         finally:
             db.close()
 
-    async def batch_persist_tickets(self):
-        logger.info(f"batch_persist_tickets called with {len(self.pending_tickets)} pending tickets")
+    async def batch_persist_tickets(self, tickets_to_persist: List[Dict[str, Any]]):
+        """Persist a batch of tickets to database"""
+        logger.info(f"batch_persist_tickets called with {len(tickets_to_persist)} tickets")
 
-        """Batch persist tickets to database every 2 minutes"""
-        if not self.pending_tickets:
-            logger.info("No pending tickets to persist")
+        if not tickets_to_persist:
+            logger.info("No tickets to persist")
             return
 
         try:
             db = SessionLocal()
-            tickets_to_persist = self.pending_tickets.copy()
-            self.pending_tickets.clear()
 
             # Batch insert tickets
             zone_ticket_counts = {}
             ticket_objects = []
+
             for ticket_info in tickets_to_persist:
                 ticket_obj = Ticket(
                     id=ticket_info['ticket_id'],
@@ -149,18 +186,21 @@ class TicketProcessor:
                 zone_ticket_counts[zone_id] = zone_ticket_counts.get(zone_id, 0) + 1
 
             db.add_all(ticket_objects)
+
             for zone_id, ticket_count in zone_ticket_counts.items():
                 zone = db.query(Zone).filter(Zone.id == zone_id).first()
                 if zone:
                     zone.available_seats -= ticket_count
                     logger.info(f"Decreased {ticket_count} seats for zone {zone_id}")
+
             db.commit()
             logger.info(f"Batch persisted {len(ticket_objects)} tickets to database")
 
         except Exception as e:
             logger.error(f"Error batch persisting tickets: {e}")
-            # Add tickets back to pending list for retry
-            self.pending_tickets.extend(tickets_to_persist)
+            # Re-queue failed tickets for retry
+            for ticket_info in tickets_to_persist:
+                await self.ticket_queue.put(ticket_info)
         finally:
             db.close()
 
@@ -175,6 +215,9 @@ class TicketProcessor:
         logger.info("Starting ticket processor...")
         self.running = True
 
+        # Start the background batch processor
+        self.batch_task = asyncio.create_task(self.start_batch_processor())
+
         try:
             async for message in self.consumer:
                 try:
@@ -187,13 +230,6 @@ class TicketProcessor:
                     # Produce result to ticket-events topic
                     await ticket_producer.produce_ticket_result(result)
 
-                    # Check if it's time to batch persist tickets
-                    current_time = time.time()
-                    if (current_time - self.last_batch_time >= self.batch_timeout or
-                            len(self.pending_tickets) >= self.batch_size):
-                        await self.batch_persist_tickets()
-                        self.last_batch_time = current_time
-
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
 
@@ -205,20 +241,29 @@ class TicketProcessor:
     async def cleanup(self):
         """Clean up resources"""
         self.running = False
+
         if self.consumer:
             await self.consumer.stop()
             logger.info("Consumer closed")
 
-        # Persist any remaining tickets
-        if self.pending_tickets:
-            await self.batch_persist_tickets()
+        # Wait for queue to be processed
+        if self.batch_task:
+            await self.ticket_queue.join()  # Wait for all items to be processed
+            self.batch_task.cancel()
+            try:
+                await self.batch_task
+            except asyncio.CancelledError:
+                pass
+
 
 # Global processor instance
 ticket_processor = TicketProcessor()
 
+
 async def start_ticket_processor():
     """Start the ticket processor service"""
     await ticket_processor.process_messages()
+
 
 if __name__ == "__main__":
     # Run the processor as standalone service
