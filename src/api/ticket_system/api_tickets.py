@@ -10,7 +10,7 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 logger = logging.getLogger(__name__)
 
 # Ticket endpoints
-@router.post("/tickets/", response_model=ticket_schemas.TicketDetail)
+@router.post("/", response_model=ticket_schemas.TicketDetail)
 async def create_ticket(ticket: ticket_schemas.TicketCreate, db: Session = Depends(get_db)):
     db_session_context.set(db)
     try:
@@ -21,7 +21,7 @@ async def create_ticket(ticket: ticket_schemas.TicketCreate, db: Session = Depen
         logger.error(f"Unexpected error creating ticket: {e}")
         raise HTTPException(status_code=500, detail="Failed to create ticket")
 
-@router.get("/tickets/{ticket_id}", response_model=ticket_schemas.TicketDetail)
+@router.get("/{ticket_id}", response_model=ticket_schemas.TicketDetail)
 async def read_ticket(ticket_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     ticket = await ticket_repository.get_with_details(ticket_id)
@@ -29,7 +29,7 @@ async def read_ticket(ticket_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
 
-@router.get("/tickets/concert/{concert_id}", response_model=list[ticket_schemas.Ticket])
+@router.get("/concert/{concert_id}", response_model=list[ticket_schemas.Ticket])
 async def read_tickets_by_concert(concert_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     tickets = await ticket_repository.get_by_concert(concert_id=concert_id)
@@ -37,7 +37,7 @@ async def read_tickets_by_concert(concert_id: str, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="No tickets found for this concert")
     return tickets
 
-@router.get("/tickets/zone/{zone_id}", response_model=list[ticket_schemas.Ticket])
+@router.get("/zone/{zone_id}", response_model=list[ticket_schemas.Ticket])
 async def read_tickets_by_zone(zone_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     tickets = await ticket_repository.get_by_zone(zone_id=zone_id)

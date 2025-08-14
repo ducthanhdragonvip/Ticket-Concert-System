@@ -148,7 +148,6 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
             ticket_detail = await self.get_with_details(ticket.id)
             if ticket_detail:
                 result.append(ticket_detail)
-
         return result
 
     async def get_by_zone(self, zone_id: str) -> list[Ticket]:
