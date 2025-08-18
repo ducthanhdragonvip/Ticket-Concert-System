@@ -17,7 +17,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Admin Service")
+app = FastAPI(title="Admin Service", root_path="/admin")
 
 @app.get("/")
 def read_root():

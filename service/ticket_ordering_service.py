@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI):
     await ticket_result_consumer.cleanup()
     logger.info("Ticket ordering service shut down")
 
-app = FastAPI(title="Ticket Ordering Service", lifespan=lifespan)
+app = FastAPI(title="Ticket Ordering Service", lifespan=lifespan, root_path="/ticket_ordering")
 
 @app.get("/")
 def read_root():
