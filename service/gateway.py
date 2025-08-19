@@ -3,11 +3,24 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import logging
+import logging_loki
 from contextlib import asynccontextmanager
 from typing import Optional
+from src.utils.observablity import PrometheusMiddleware, metrics, setting_otlp
 
-logging.basicConfig(level=logging.INFO)
+loki_handler = logging_loki.LokiHandler(
+    url="http://localhost:3100/loki/api/v1/push",
+    tags={"application": "gateway_service", "environment": "development", "job_name": "gateway_service"},
+    version="1",
+)
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(loki_handler)
+
+# Create your application logger
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 SERVICES = {
     "admin": "http://127.0.0.1:8003",
@@ -17,7 +30,6 @@ SERVICES = {
 
 # Global HTTP client
 http_client = None
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,6 +53,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Concert Ticketing API Gateway", lifespan=lifespan)
 
+setting_otlp(app=app, app_name="gateway_service",endpoint="http://localhost:4317")
+
+app.add_middleware(PrometheusMiddleware, app_name="gateway_service")
+app.add_route("/metrics", metrics)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -52,12 +69,14 @@ app.add_middleware(
 
 @app.get("/")
 def read_root():
+    logger.info("Root endpoint accessed")
     return {"message": "Concert Ticketing API Gateway", "services": list(SERVICES.keys())}
 
 
 @app.api_route("/{service_name}/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def proxy_request(service_name: str, path: str, request: Request):
     if service_name not in SERVICES:
+        logger.error(f"Service '{service_name}' not found")
         raise HTTPException(status_code=404, detail=f"Service '{service_name}' not found")
 
     service_url = SERVICES[service_name]
@@ -82,7 +101,7 @@ async def proxy_request(service_name: str, path: str, request: Request):
                      if k.lower() not in ['host', 'content-length']},
             content=body,
         )
-
+        logger.info(f"Proxying {request.method} request to {service_name} at {target_url}")
         # Return the response
         return JSONResponse(
             status_code=response.status_code,

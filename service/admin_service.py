@@ -13,14 +13,36 @@ from src.dto import (
     ticket as ticket_schemas
 )
 import logging
+import logging_loki
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from src.utils.observablity import PrometheusMiddleware, metrics, setting_otlp
 
 app = FastAPI(title="Admin Service", root_path="/admin")
 
+loki_handler = logging_loki.LokiHandler(
+    url="http://localhost:3100/loki/api/v1/push",
+    tags={"application": "admin_service", "environment": "development", "job_name": "admin_service"},
+    version="1",
+)
+
+# Configure root logger first
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(loki_handler)
+
+# Create your application logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+setting_otlp(app=app, app_name="admin_service",endpoint="http://localhost:4317")
+
+app.add_middleware(PrometheusMiddleware, app_name="admin_service")
+app.add_route("/metrics", metrics)
+
+
 @app.get("/")
 def read_root():
+    logger.info("Root endpoint accessed")
     return {"message": "Welcome to the Admin Service"}
 
 # Venue CRUD (except order)

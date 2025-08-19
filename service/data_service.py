@@ -5,6 +5,7 @@ from src.repositories.concert_repository import concert_repository
 from src.repositories.venue_repository import venue_repository
 from src.repositories.zone_repository import zone_repository
 from src.repositories.ticket_repository import ticket_repository
+from src.utils.observablity import PrometheusMiddleware, metrics, setting_otlp
 from src.dto import (
     venue as venue_schemas,
     concert as concert_schemas,
@@ -12,14 +13,33 @@ from src.dto import (
     ticket as ticket_schemas
 )
 import logging
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+import logging_loki
 
 app = FastAPI(title="Data Service", root_path="/data")
 
+loki_handler = logging_loki.LokiHandler(
+    url="http://localhost:3100/loki/api/v1/push",
+    tags={"application": "data_service", "environment": "development", "job_name": "data_service"},
+    version="1",
+)
+
+# Configure root logger first
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+root_logger.addHandler(loki_handler)
+
+# Create your application logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+setting_otlp(app=app, app_name="data_service",endpoint="http://localhost:4317")
+
+app.add_middleware(PrometheusMiddleware, app_name="data_service")
+app.add_route("/metrics", metrics)
+
 @app.get("/")
 def read_root():
+    logger.info("Root endpoint accessed")
     return {"message": "Welcome to the Data Service"}
 
 # Read-only venue endpoints
