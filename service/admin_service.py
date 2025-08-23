@@ -49,14 +49,20 @@ def read_root():
 @app.post("/venues/", response_model=venue_schemas.Venue)
 async def create_venue(venue: venue_schemas.VenueCreate, db: Session = Depends(get_db)):
     db_session_context.set(db)
-    result = await venue_repository.create(venue)
-    return result
+    try:
+        result = await venue_repository.create(venue)
+        logger.info(f"Venue created with id {result.id}")
+        return result
+    except Exception as e:
+        logger.error(f"Error creating venue: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create venue")
 
 @app.get("/venues/{venue_id}", response_model=venue_schemas.Venue)
 async def read_venue(venue_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     venue = await venue_repository.get(venue_id)
     if not venue:
+        logger.error("Venue not found")
         raise HTTPException(status_code=404, detail="Venue not found")
     return venue
 
@@ -65,9 +71,11 @@ async def update_venue(venue_id: str, venue: venue_schemas.VenueUpdate, db: Sess
     db_session_context.set(db)
     existing_venue = await venue_repository.get(venue_id)
     if not existing_venue:
+        logger.error("Venue not found for update")
         raise HTTPException(status_code=404, detail="Venue not found")
     updated_venue = await venue_repository.update(venue_id, venue)
     if not updated_venue:
+        logger.error("Failed to update venue")
         raise HTTPException(status_code=500, detail="Failed to update venue")
     return updated_venue
 
@@ -75,14 +83,20 @@ async def update_venue(venue_id: str, venue: venue_schemas.VenueUpdate, db: Sess
 @app.post("/concerts/", response_model=concert_schemas.Concert)
 async def create_concert(concert: concert_schemas.ConcertCreate, db: Session = Depends(get_db)):
     db_session_context.set(db)
-    result = await concert_repository.create(concert)
-    return result
+    try:
+        result = await concert_repository.create(concert)
+        logger.info(f"Concert created with id {result.id}")
+        return result
+    except Exception as e:
+        logger.error(f"Error creating concert: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create concert")
 
 @app.get("/concerts/{concert_id}", response_model=concert_schemas.ConcertDetail)
 async def read_concert(concert_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     concert = await concert_repository.get(concert_id)
     if not concert:
+        logger.error("Concert not found")
         raise HTTPException(status_code=404, detail="Concert not found")
     return concert
 
@@ -91,9 +105,11 @@ async def update_concert(concert_id: str, concert: concert_schemas.ConcertUpdate
     db_session_context.set(db)
     existing_concert = await concert_repository.get(concert_id)
     if not existing_concert:
+        logger.error("Concert not found for update")
         raise HTTPException(status_code=404, detail="Concert not found")
     updated_concert = await concert_repository.update(concert_id, concert)
     if not updated_concert:
+        logger.error("Failed to update concert")
         raise HTTPException(status_code=500, detail="Failed to update concert")
     return updated_concert
 
@@ -101,15 +117,26 @@ async def update_concert(concert_id: str, concert: concert_schemas.ConcertUpdate
 @app.post("/zones/", response_model=zone_schemas.Zone)
 async def create_zone(zone: zone_schemas.ZoneCreate, db: Session = Depends(get_db)):
     db_session_context.set(db)
-    result = await zone_repository.create(zone)
-    invalidate_cache(zone.concert_id)
-    return result
+    try:
+        result = await zone_repository.create(zone)
+        invalidate_cache(zone.concert_id)
+        return result
+    except ValueError as e:
+        error_msg = str(e)
+        if "more zones" in error_msg.lower():
+            raise HTTPException(status_code=409, detail=error_msg)
+        else:
+            raise HTTPException(status_code=400, detail=error_msg)
+    except Exception as e:
+        logger.error(f"Unexpected error creating zone: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create zone")
 
 @app.get("/zones/{zone_id}", response_model=zone_schemas.Zone)
 async def read_zone(zone_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     zone = await zone_repository.get(zone_id)
     if not zone:
+        logger.error("Zone not found")
         raise HTTPException(status_code=404, detail="Zone not found")
     return zone
 
@@ -118,9 +145,11 @@ async def update_zone(zone_id: str, zone: zone_schemas.ZoneUpdate, db: Session =
     db_session_context.set(db)
     existing_zone = await zone_repository.get(zone_id)
     if not existing_zone:
+        logger.error("Zone not found for update")
         raise HTTPException(status_code=404, detail="Zone not found")
     updated_zone = await zone_repository.update(zone_id, zone)
     if not updated_zone:
+        logger.error("Failed to update zone")
         raise HTTPException(status_code=500, detail="Failed to update zone")
     invalidate_cache(updated_zone.concert_id)
     return updated_zone
@@ -131,6 +160,7 @@ async def read_ticket(ticket_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     ticket = await ticket_repository.get_with_details(ticket_id)
     if not ticket:
+        logger.error("Ticket not found")
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
 
@@ -139,6 +169,7 @@ async def read_tickets_by_concert(concert_id: str, db: Session = Depends(get_db)
     db_session_context.set(db)
     tickets = await ticket_repository.get_by_concert(concert_id=concert_id)
     if not tickets:
+        logger.error("No tickets found for this concert")
         raise HTTPException(status_code=404, detail="No tickets found for this concert")
     return tickets
 
@@ -147,6 +178,7 @@ async def read_tickets_by_zone(zone_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     tickets = await ticket_repository.get_by_zone(zone_id=zone_id)
     if not tickets:
+        logger.error("No tickets found for this zone")
         raise HTTPException(status_code=404, detail="No tickets found for this zone")
     return tickets
 

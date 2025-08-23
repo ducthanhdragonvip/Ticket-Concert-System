@@ -3,9 +3,12 @@ import json
 import redis
 from functools import wraps
 import inspect
+import logging
 from typing import Any, Callable, TypeVar
 from sqlalchemy.orm import Session
 from src.utils.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Create Redis connection
 redis_client = redis.Redis(
@@ -107,7 +110,7 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
                 else:
                     return result
 
-                print(f"Cache key (from result): {cache_key}")
+                logger.debug(f"Cache key (from result): {cache_key}")
 
                 try:
                     # Handle both Pydantic models and SQLAlchemy models
@@ -120,9 +123,9 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
 
                     serialized = json.dumps(cache_data, default=str)
                     redis_client.setex(cache_key, expire_time, serialized)
-                    print(f"Cached data for key: {cache_key}")
+                    logger.info(f"Cached data for key: {cache_key}")
                 except Exception as e:
-                    print(f"Failed to cache data: {e}")
+                    logger.error(f"Failed to cache data: {e}")
 
                 return result
 
@@ -138,11 +141,11 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
                     key_parts.append(f"{k}={v}")
 
             cache_key = f"{''.join(key_parts)}"
-            print(f"Cache key: {cache_key}")
+            logger.debug(f"Cache key: {cache_key}")
 
             cached_data = redis_client.get(cache_key)
             if cached_data:
-                print(f"Cache hit for key: {cache_key}")
+                logger.info(f"Cache hit for key: {cache_key}")
                 try:
                     data_dict = json.loads(cached_data)
                     cached_type = data_dict.pop('_cached_type', None)
@@ -154,10 +157,10 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
                         return reconstruct_model_with_relationships(repo_instance.model, data_dict)
                     return data_dict
                 except (json.JSONDecodeError, TypeError) as e:
-                    print(f"Failed to decode cached data: {e}")
+                    logger.error(f"Failed to decode cached data: {e}")
                     redis_client.delete(cache_key)  # Clear corrupted cache
 
-            print(f"Cache miss for key: {cache_key}")
+            logger.debug(f"Cache miss for key: {cache_key}")
 
             if inspect.iscoroutinefunction(func):
                 result = await func(*args, **kwargs)
@@ -176,9 +179,9 @@ def cache_data(expire_time: int = 3600, use_result_id: bool = False):
 
                     serialized = json.dumps(cache_data, default=str)
                     redis_client.setex(cache_key, expire_time, serialized)
-                    print(f"Cached data for key: {cache_key}")
+                    logger.info(f"Cached data for key: {cache_key}")
                 except Exception as e:
-                    print(f"Failed to cache data: {e}")
+                    logger.error(f"Failed to cache data: {e}")
 
             return result
 
@@ -198,7 +201,7 @@ def invalidate_cache(key_pattern: str):
 
     if keys_to_delete:
         redis_client.delete(*keys_to_delete)
-        print(f"Invalidated {len(keys_to_delete)} cache entries")
+        logger.info(f"Invalidated {len(keys_to_delete)} cache entries")
 
 
 def update_cache(key: str, data: Any, expire_time: int = 3600):
@@ -214,6 +217,6 @@ def update_cache(key: str, data: Any, expire_time: int = 3600):
 
         serialized = json.dumps(cache_data, default=str)
         redis_client.setex(key, expire_time, serialized)
-        print(f"Updated cache for key: {key}")
+        logger.info(f"Updated cache for key: {key}")
     except Exception as e:
-        print(f"Failed to update cache: {e}")
+        logger.error(f"Failed to update cache: {e}")

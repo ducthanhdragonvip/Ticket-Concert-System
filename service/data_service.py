@@ -48,6 +48,7 @@ async def read_venue(venue_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     venue = await venue_repository.get(venue_id)
     if not venue:
+        logger.error("Venue not found")
         raise HTTPException(status_code=404, detail="Venue not found")
     return venue
 
@@ -57,6 +58,7 @@ async def read_concert(concert_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     concert = await concert_repository.get(concert_id)
     if not concert:
+        logger.error("Concert not found")
         raise HTTPException(status_code=404, detail="Concert not found")
     return concert
 
@@ -66,6 +68,7 @@ async def read_zone(zone_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     zone = await zone_repository.get(zone_id)
     if not zone:
+        logger.error("Zone not found")
         raise HTTPException(status_code=404, detail="Zone not found")
     return zone
 
@@ -75,6 +78,7 @@ async def read_ticket(ticket_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     ticket = await ticket_repository.get_with_details(ticket_id)
     if not ticket:
+        logger.error("Ticket not found")
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
 
@@ -83,6 +87,7 @@ async def read_tickets_by_concert(concert_id: str, db: Session = Depends(get_db)
     db_session_context.set(db)
     tickets = await ticket_repository.get_by_concert(concert_id=concert_id)
     if not tickets:
+        logger.error("No tickets found for this concert")
         raise HTTPException(status_code=404, detail="No tickets found for this concert")
     return tickets
 
@@ -91,6 +96,7 @@ async def read_tickets_by_zone(zone_id: str, db: Session = Depends(get_db)):
     db_session_context.set(db)
     tickets = await ticket_repository.get_by_zone(zone_id=zone_id)
     if not tickets:
+        logger.error("No tickets found for this zone")
         raise HTTPException(status_code=404, detail="No tickets found for this zone")
     return tickets
 

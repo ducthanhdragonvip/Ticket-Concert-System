@@ -12,7 +12,6 @@ from src.utils.cache import cache_data, update_cache
 from src.kafka.producer import ticket_producer
 from uuid import uuid4
 import logging
-from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -28,13 +27,13 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
         zone = await zone_repository.get(obj_in.zone_id)
 
         if not zone:
-            raise HTTPException(status_code=404, detail="Zone not found")
+            raise ValueError("Zone not found")
 
         if str(obj_in.concert_id) not in str(obj_in.zone_id):
-            raise HTTPException(status_code=400, detail="Zone does not belong to the specified concert")
+            raise ValueError("Zone does not belong to the specified concert")
 
         if zone.available_seats <= 0:
-            raise HTTPException(status_code=400, detail="No available seats in this zone")
+            raise ValueError("No available seats in this zone")
         #
         # concert = await concert_repository.get(zone.concert_id)
 
@@ -48,30 +47,23 @@ class TicketRepository(BaseRepository[Ticket, TicketCreate, TicketUpdate]):
 
         success = await ticket_producer.produce_ticket_order(ticket_order)
         if not success:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to submit ticket order to processing queue"
-            )
+            raise RuntimeError("Failed to submit ticket order to processing queue")
 
         logger.info(f"Ticket order {ticket_id} submitted to Kafka")
 
         result = await ticket_result_consumer.wait_for_ticket_result(ticket_id, timeout=30)
 
         if not result:
-            raise HTTPException(
-                status_code=408,
-                detail="Ticket processing timeout. Please try again or check your order status."
-            )
+            raise TimeoutError("Ticket processing timeout. Please try again or check your order status.")
 
         if result['status'] == 'failed':
             error_message = result.get('error', 'Unknown error occurred')
-            print(result)
             if 'available seats' in error_message.lower():
-                raise HTTPException(status_code=400, detail=error_message)
+                raise ValueError(error_message)
             elif 'not found' in error_message.lower():
-                raise HTTPException(status_code=404, detail=error_message)
+                raise ValueError(error_message)
             else:
-                raise HTTPException(status_code=500, detail=error_message)
+                raise RuntimeError(error_message)
 
         ticket_data = result.get('ticket_data', {})
         return TicketDetail(**ticket_data)

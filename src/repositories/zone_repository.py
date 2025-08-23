@@ -7,8 +7,6 @@ from src.repositories.base import BaseRepository
 from src.repositories.concert_repository import concert_repository
 from src.utils.cache import cache_data
 
-from fastapi import HTTPException
-
 
 class ZoneRepository(BaseRepository[Zone, ZoneCreate, ZoneUpdate]):
     def __init__(self):
@@ -27,7 +25,7 @@ class ZoneRepository(BaseRepository[Zone, ZoneCreate, ZoneUpdate]):
         next_zone_number = (max_zone_number or 0) + 1
 
         if next_zone_number > concert.num_zones:
-            raise HTTPException(detail="Cannot create more zones than the concert's num_zones", status_code=409)
+            raise ValueError("Cannot create more zones than the concert's num_zones")
 
         id = getattr(obj_in, 'id', f"zon_{obj_in.concert_id}_{obj_in.name}_{next_zone_number}")
         db_obj = self.model(

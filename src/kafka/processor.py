@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import logging_loki
 import time
 import json
 from typing import Dict, Any, List
@@ -7,7 +8,7 @@ from datetime import datetime
 
 from src.repositories import zone_repository, concert_repository
 from src.utils.cache import update_cache
-from src.utils.database import db_session_context, get_db, SessionLocal, Base, engine
+from src.utils.database import db_session_context, SessionLocal
 from src.utils.kafka_config import kafka_config, TicketResultEvent
 from src.kafka.producer import ticket_producer
 from src.dto.ticket import TicketDetail
@@ -16,8 +17,18 @@ from src.entities.zone import Zone
 from src.entities.concert import Concert
 from src.utils.config import settings
 
-logging.basicConfig(level=logging.INFO)
+loki_handler = logging_loki.LokiHandler(
+    url="http://localhost:3100/loki/api/v1/push",
+    tags={"application": "ticket_ordering_service", "component": "processor", "environment": "development"},
+    version="1",
+)
+
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(loki_handler)
+
+root_logger = logging.getLogger()
+root_logger.addHandler(loki_handler)
 
 
 class TicketProcessor:
