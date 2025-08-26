@@ -19,6 +19,28 @@ services:
     networks:
       - confluent
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.1
+    container_name: keycloak
+    command: start-dev
+    environment:
+      DB_VENDOR: mysql
+      DB_ADDR: mysql:3306
+      DB_DATABASE: concert_db
+      DB_USER: root
+      DB_PASSWORD: mysql
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY: edge
+      TZ: Asia/Bangkok
+    ports:
+      - "8181:8080"
+    depends_on:
+      - mysql
+    networks:
+      - confluent
+
   redis:
     image: redis:7.0
     container_name: redis
