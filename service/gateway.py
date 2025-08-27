@@ -2,6 +2,7 @@ import jwt
 import httpx
 from urllib.parse import unquote
 import asyncio
+import os
 from fastapi import FastAPI, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -67,11 +68,11 @@ SERVICES = {
 http_client = None
 
 keycloak_config = KeycloakConfiguration(
-    realm="ticket_system",
-    url="http://localhost:8181",
-    client_id="api-gateway",
-    client_secret="2TNZtRQWrqv2uqY2JlBZOIHeGkid1Pfe",
-    swagger_client_id="api-gateway",
+    realm=os.getenv("REALM_NAME"),
+    url=os.getenv("KEYCLOAK_URL"),
+    client_id=os.getenv("CLIENT_ID"),
+    client_secret=os.getenv("CLIENT_SECRET"),
+    swagger_client_id=os.getenv("CLIENT_ID"),
     claims=["sub", "preferred_username", "realm_access"],
     authorization_method=AuthorizationMethod.CLAIM,
     authorization_claim="realm_access",
